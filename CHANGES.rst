@@ -4,6 +4,30 @@ Changelog (Pillow)
 4.2.0 (unreleased)
 ------------------
 
+- Use PNG for Image.show() #2527
+  [HinTak, wiredfool]
+
+- Remove WITH_DEBUG compilation flag #2522
+  [wiredfool]
+  
+- Fix return value on parameter parse error in _webp.c #2521
+  [adw1n]
+
+- Set executable flag on scripts with shebang line #2295
+  [radarhere]
+
+- Flake8 #2460
+  [radarhere]
+
+- Doc: Release Process Changes #2516
+  [wiredfool]
+  
+- CI: Added region for s3 deployment on appveyor #2515
+  [wiredfool]
+  
+- Doc: Updated references to point to existing files #2507
+  [radarhere]  
+
 - Return copy on Image crop if crop dimensions match the image #2471
   [radarhere]
 
@@ -2529,7 +2553,7 @@ Pre-fork
 
         import numpy, Image
 
-        im = Image.open('lena.jpg')
+        im = Image.open('hopper.jpg')
 
         a = numpy.asarray(im) # a is readonly
 
@@ -3372,7 +3396,7 @@ Pre-fork
       to any other format, via a lookup table.  That table should
       contain 256 values for each band in the output image.
 
-    + Some file drivers (including FLI/FLC, GIF, and IM) accidently
+    + Some file drivers (including FLI/FLC, GIF, and IM) accidentally
       overwrote the offset method with an internal attribute.  All
       drivers have been updated to use private attributes where
       possible.
