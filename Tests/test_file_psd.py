@@ -2,7 +2,6 @@ from helper import hopper, unittest, PillowTestCase
 
 from PIL import Image, PsdImagePlugin
 
-# sample ppm stream
 test_file = "Tests/images/hopper.psd"
 
 
@@ -44,7 +43,7 @@ class TestImagePsd(PillowTestCase):
                 im.seek(n_frames+1)
                 break
             except EOFError:
-                self.assertTrue(im.tell() < n_frames)
+                self.assertLess(im.tell(), n_frames)
 
     def test_seek_tell(self):
         im = Image.open(test_file)

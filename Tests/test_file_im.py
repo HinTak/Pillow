@@ -15,6 +15,16 @@ class TestFileIm(PillowTestCase):
         self.assertEqual(im.size, (128, 128))
         self.assertEqual(im.format, "IM")
 
+    def test_tell(self):
+        # Arrange
+        im = Image.open(TEST_IM)
+
+        # Act
+        frame = im.tell()
+
+        # Assert
+        self.assertEqual(frame, 0)
+
     def test_n_frames(self):
         im = Image.open(TEST_IM)
         self.assertEqual(im.n_frames, 1)
@@ -30,7 +40,7 @@ class TestFileIm(PillowTestCase):
                 im.seek(n_frames)
                 break
             except EOFError:
-                self.assertTrue(im.tell() < n_frames)
+                self.assertLess(im.tell(), n_frames)
 
     def test_roundtrip(self):
         out = self.tempfile('temp.im')
