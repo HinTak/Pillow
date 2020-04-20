@@ -1,8 +1,9 @@
 Building Pillow on Windows
 ==========================
 
-.. note:: For most people, the :doc:`installation instructions
-          <installation>` should be sufficient
+.. note:: For most people, the `installation instructions
+          <../docs/installation.rst#windows-installation>`_ should
+          be sufficient.
 
 This page will describe a build setup to build Pillow against the
 supported Python versions in 32 and 64-bit modes, using freely
@@ -36,8 +37,8 @@ virtualenv as well, reducing the number of packages that we need to
 install.)
 
 Download the rest of the Pythons by opening a command window, changing
-to the `winbuild` directory, and running `python
-get_pythons.py`.
+to the ``winbuild`` directory, and running ``python
+get_pythons.py``.
 
 UNDONE -- gpg verify the signatures (note that we can download from
 https)
@@ -51,13 +52,11 @@ Compilers
 
 Download and install:
 
-* `Microsoft Windows SDK for Windows 7 and .NET Framework 3.5
-  SP1 <https://www.microsoft.com/en-us/download/details.aspx?id=3138>`_
-
 * `Microsoft Windows SDK for Windows 7 and .NET Framework
   4 <https://www.microsoft.com/en-us/download/details.aspx?id=8279>`_
 
-* `CMake-2.8.10.2-win32-x86.exe <https://cmake.org/download/>`_
+* `CMake-2.8.10.2-win32-x86.exe
+  <https://cmake.org/files/v2.8/cmake-2.8.10.2-win32-x86.exe>`_
 
 The samples and the .NET SDK portions aren't required, just the
 compilers and other tools. UNDONE -- check exact wording.
@@ -66,8 +65,8 @@ Dependencies
 ------------
 
 The script 'build_dep.py' downloads and builds the dependencies.  Open
-a command window, change directory into `winbuild` and run `python
-build_dep.py`.
+a command window, change directory into ``winbuild`` and run ``python
+build_dep.py``.
 
 This will download libjpeg, libtiff, libz, and freetype. It will then
 compile 32 and 64-bit versions of the libraries, with both versions of
@@ -79,9 +78,9 @@ UNDONE -- webp, jpeg2k not recognized
 Building Pillow
 ---------------
 
-Once the dependencies are built, run `python build.py --clean` to
-build and install Pillow in virtualenvs for each python
-build. `build.py --dist` will build Windows installers instead of
+Once the dependencies are built, run ``python build.py --clean`` to
+build and install Pillow in virtualenvs for each Python
+build. ``build.py --wheel`` will build wheels instead of
 installing into virtualenvs.
 
 UNDONE -- suppressed output, what about failures.
@@ -89,6 +88,6 @@ UNDONE -- suppressed output, what about failures.
 Testing Pillow
 --------------
 
-Build and install Pillow, then run `python test.py` from the
-`winbuild` directory.
+Build and install Pillow, then run ``python test.py`` from the
+``winbuild`` directory.
 

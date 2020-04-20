@@ -1,49 +1,73 @@
-from helper import unittest, PillowTestCase, on_appveyor
-
+import subprocess
 import sys
 
-try:
-    from PIL import ImageGrab
+import pytest
+from PIL import Image, ImageGrab
 
-    class TestImageGrab(PillowTestCase):
-
-        @unittest.skipIf(on_appveyor(), "Test fails on appveyor")
-        def test_grab(self):
-            im = ImageGrab.grab()
-            self.assert_image(im, im.mode, im.size)
-
-        @unittest.skipIf(on_appveyor(), "Test fails on appveyor")
-        def test_grab2(self):
-            im = ImageGrab.grab()
-            self.assert_image(im, im.mode, im.size)
-
-except ImportError:
-    class TestImageGrab(PillowTestCase):
-        def test_skip(self):
-            self.skipTest("ImportError")
+from .helper import assert_image
 
 
-class TestImageGrabImport(PillowTestCase):
+class TestImageGrab:
+    @pytest.mark.skipif(
+        sys.platform not in ("win32", "darwin"), reason="requires Windows or macOS"
+    )
+    def test_grab(self):
+        for im in [
+            ImageGrab.grab(),
+            ImageGrab.grab(include_layered_windows=True),
+            ImageGrab.grab(all_screens=True),
+        ]:
+            assert_image(im, im.mode, im.size)
 
-    def test_import(self):
-        # Arrange
-        exception = None
+        im = ImageGrab.grab(bbox=(10, 20, 50, 80))
+        assert_image(im, im.mode, (40, 60))
 
-        # Act
+    @pytest.mark.skipif(not Image.core.HAVE_XCB, reason="requires XCB")
+    def test_grab_x11(self):
         try:
-            from PIL import ImageGrab
-            ImageGrab.__name__  # dummy to prevent Pyflakes warning
-        except Exception as e:
-            exception = e
+            if sys.platform not in ("win32", "darwin"):
+                im = ImageGrab.grab()
+                assert_image(im, im.mode, im.size)
 
-        # Assert
-        if sys.platform in ["win32", "darwin"]:
-            self.assertIsNone(exception)
+            im2 = ImageGrab.grab(xdisplay="")
+            assert_image(im2, im2.mode, im2.size)
+        except OSError as e:
+            pytest.skip(str(e))
+
+    @pytest.mark.skipif(Image.core.HAVE_XCB, reason="tests missing XCB")
+    def test_grab_no_xcb(self):
+        if sys.platform not in ("win32", "darwin"):
+            with pytest.raises(OSError) as e:
+                ImageGrab.grab()
+            assert str(e.value).startswith("Pillow was built without XCB support")
+
+        with pytest.raises(OSError) as e:
+            ImageGrab.grab(xdisplay="")
+        assert str(e.value).startswith("Pillow was built without XCB support")
+
+    @pytest.mark.skipif(not Image.core.HAVE_XCB, reason="requires XCB")
+    def test_grab_invalid_xdisplay(self):
+        with pytest.raises(OSError) as e:
+            ImageGrab.grab(xdisplay="error.test:0.0")
+        assert str(e.value).startswith("X connection failed")
+
+    def test_grabclipboard(self):
+        if sys.platform == "darwin":
+            subprocess.call(["screencapture", "-cx"])
+        elif sys.platform == "win32":
+            p = subprocess.Popen(["powershell", "-command", "-"], stdin=subprocess.PIPE)
+            p.stdin.write(
+                b"""[Reflection.Assembly]::LoadWithPartialName("System.Drawing")
+[Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+$bmp = New-Object Drawing.Bitmap 200, 200
+[Windows.Forms.Clipboard]::SetImage($bmp)"""
+            )
+            p.communicate()
         else:
-            self.assertIsInstance(exception, ImportError)
-            self.assertEqual(str(exception),
-                             "ImageGrab is macOS and Windows only")
+            with pytest.raises(NotImplementedError) as e:
+                ImageGrab.grabclipboard()
+            assert str(e.value) == "ImageGrab.grabclipboard() is macOS and Windows only"
+            return
 
-
-if __name__ == '__main__':
-    unittest.main()
+        im = ImageGrab.grabclipboard()
+        assert_image(im, im.mode, im.size)

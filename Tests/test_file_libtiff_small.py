@@ -1,8 +1,8 @@
-from helper import unittest
+from io import BytesIO
 
 from PIL import Image
 
-from test_file_libtiff import LibTiffTestCase
+from .test_file_libtiff import LibTiffTestCase
 
 
 class TestFileLibTiffSmall(LibTiffTestCase):
@@ -15,38 +15,30 @@ class TestFileLibTiffSmall(LibTiffTestCase):
         file just before reading in libtiff. These tests remain
         to ensure that it stays fixed. """
 
-    def test_g4_hopper_file(self):
+    def test_g4_hopper_file(self, tmp_path):
         """Testing the open file load path"""
 
         test_file = "Tests/images/hopper_g4.tif"
-        with open(test_file, 'rb') as f:
-            im = Image.open(f)
+        with open(test_file, "rb") as f:
+            with Image.open(f) as im:
+                assert im.size == (128, 128)
+                self._assert_noerr(tmp_path, im)
 
-            self.assertEqual(im.size, (128, 128))
-            self._assert_noerr(im)
-
-    def test_g4_hopper_bytesio(self):
+    def test_g4_hopper_bytesio(self, tmp_path):
         """Testing the bytesio loading code path"""
-        from io import BytesIO
         test_file = "Tests/images/hopper_g4.tif"
         s = BytesIO()
-        with open(test_file, 'rb') as f:
+        with open(test_file, "rb") as f:
             s.write(f.read())
             s.seek(0)
-        im = Image.open(s)
+        with Image.open(s) as im:
+            assert im.size == (128, 128)
+            self._assert_noerr(tmp_path, im)
 
-        self.assertEqual(im.size, (128, 128))
-        self._assert_noerr(im)
-
-    def test_g4_hopper(self):
+    def test_g4_hopper(self, tmp_path):
         """The 128x128 lena image failed for some reason."""
 
         test_file = "Tests/images/hopper_g4.tif"
-        im = Image.open(test_file)
-
-        self.assertEqual(im.size, (128, 128))
-        self._assert_noerr(im)
-
-
-if __name__ == '__main__':
-    unittest.main()
+        with Image.open(test_file) as im:
+            assert im.size == (128, 128)
+            self._assert_noerr(tmp_path, im)

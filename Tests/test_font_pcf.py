@@ -1,66 +1,90 @@
-from helper import unittest, PillowTestCase
+import os
 
-from PIL import Image, FontFile, PcfFontFile
-from PIL import ImageFont, ImageDraw
+import pytest
+from PIL import FontFile, Image, ImageDraw, ImageFont, PcfFontFile
 
-codecs = dir(Image.core)
+from .helper import assert_image_equal, assert_image_similar, skip_unless_feature
 
-fontname = "Tests/fonts/helvO18.pcf"
+fontname = "Tests/fonts/10x20-ISO8859-1.pcf"
 
 message = "hello, world"
 
 
-class TestFontPcf(PillowTestCase):
+pytestmark = skip_unless_feature("zlib")
 
-    def setUp(self):
-        if "zip_encoder" not in codecs or "zip_decoder" not in codecs:
-            self.skipTest("zlib support not available")
 
-    def save_font(self):
-        test_file = open(fontname, "rb")
+def save_font(request, tmp_path):
+    with open(fontname, "rb") as test_file:
         font = PcfFontFile.PcfFontFile(test_file)
-        self.assertIsInstance(font, FontFile.FontFile)
-        self.assertEqual(len([_f for _f in font.glyph if _f]), 192)
+    assert isinstance(font, FontFile.FontFile)
+    # check the number of characters in the font
+    assert len([_f for _f in font.glyph if _f]) == 223
 
-        tempname = self.tempfile("temp.pil")
-        self.addCleanup(self.delete_tempfile, tempname[:-4]+'.pbm')
-        font.save(tempname)
-        return tempname
+    tempname = str(tmp_path / "temp.pil")
 
-    def test_sanity(self):
-        self.save_font()
+    def delete_tempfile():
+        try:
+            os.remove(tempname[:-4] + ".pbm")
+        except OSError:
+            pass  # report?
 
-    def test_invalid_file(self):
-        with open("Tests/images/flower.jpg", "rb") as fp:
-            self.assertRaises(SyntaxError, lambda: PcfFontFile.PcfFontFile(fp))
+    request.addfinalizer(delete_tempfile)
+    font.save(tempname)
 
-    def xtest_draw(self):
+    with Image.open(tempname.replace(".pil", ".pbm")) as loaded:
+        with Image.open("Tests/fonts/10x20.pbm") as target:
+            assert_image_equal(loaded, target)
 
-        tempname = self.save_font()
-        font = ImageFont.load(tempname)
-        image = Image.new("L", font.getsize(message), "white")
-        draw = ImageDraw.Draw(image)
-        draw.text((0, 0), message, font=font)
-        # assert_signature(image, "7216c60f988dea43a46bb68321e3c1b03ec62aee")
-
-    def _test_high_characters(self, message):
-
-        tempname = self.save_font()
-        font = ImageFont.load(tempname)
-        image = Image.new("L", font.getsize(message), "white")
-        draw = ImageDraw.Draw(image)
-        draw.text((0, 0), message, font=font)
-
-        compare = Image.open('Tests/images/high_ascii_chars.png')
-        self.assert_image_equal(image, compare)
-
-    def test_high_characters(self):
-        message = "".join(chr(i+1) for i in range(140, 232))
-        self._test_high_characters(message)
-        # accept bytes instances in Py3.
-        if bytes is not str:
-            self._test_high_characters(message.encode('latin1'))
+    with open(tempname, "rb") as f_loaded:
+        with open("Tests/fonts/10x20.pil", "rb") as f_target:
+            assert f_loaded.read() == f_target.read()
+    return tempname
 
 
-if __name__ == '__main__':
-    unittest.main()
+def test_sanity(request, tmp_path):
+    save_font(request, tmp_path)
+
+
+def test_invalid_file():
+    with open("Tests/images/flower.jpg", "rb") as fp:
+        with pytest.raises(SyntaxError):
+            PcfFontFile.PcfFontFile(fp)
+
+
+def test_draw(request, tmp_path):
+    tempname = save_font(request, tmp_path)
+    font = ImageFont.load(tempname)
+    im = Image.new("L", (130, 30), "white")
+    draw = ImageDraw.Draw(im)
+    draw.text((0, 0), message, "black", font=font)
+    with Image.open("Tests/images/test_draw_pbm_target.png") as target:
+        assert_image_similar(im, target, 0)
+
+
+def test_textsize(request, tmp_path):
+    tempname = save_font(request, tmp_path)
+    font = ImageFont.load(tempname)
+    for i in range(255):
+        (dx, dy) = font.getsize(chr(i))
+        assert dy == 20
+        assert dx in (0, 10)
+    for l in range(len(message)):
+        msg = message[: l + 1]
+        assert font.getsize(msg) == (len(msg) * 10, 20)
+
+
+def _test_high_characters(request, tmp_path, message):
+    tempname = save_font(request, tmp_path)
+    font = ImageFont.load(tempname)
+    im = Image.new("L", (750, 30), "white")
+    draw = ImageDraw.Draw(im)
+    draw.text((0, 0), message, "black", font=font)
+    with Image.open("Tests/images/high_ascii_chars.png") as target:
+        assert_image_similar(im, target, 0)
+
+
+def test_high_characters(request, tmp_path):
+    message = "".join(chr(i + 1) for i in range(140, 232))
+    _test_high_characters(request, tmp_path, message)
+    # accept bytes instances.
+    _test_high_characters(request, tmp_path, message.encode("latin1"))

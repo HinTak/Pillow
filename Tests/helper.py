@@ -1,188 +1,226 @@
 """
 Helper functions.
 """
-from __future__ import print_function
+
+import logging
+import os
+import shutil
 import sys
 import tempfile
-import os
-import unittest
+from io import BytesIO
 
-from PIL import Image, ImageMath
+import pytest
+from PIL import Image, ImageMath, features
+
+logger = logging.getLogger(__name__)
+
+
+HAS_UPLOADER = False
+
+if os.environ.get("SHOW_ERRORS", None):
+    # local img.show for errors.
+    HAS_UPLOADER = True
+
+    class test_image_results:
+        @staticmethod
+        def upload(a, b):
+            a.show()
+            b.show()
+
+
+elif "GITHUB_ACTIONS" in os.environ:
+    HAS_UPLOADER = True
+
+    class test_image_results:
+        @staticmethod
+        def upload(a, b):
+            dir_errors = os.path.join(os.path.dirname(__file__), "errors")
+            os.makedirs(dir_errors, exist_ok=True)
+            tmpdir = tempfile.mkdtemp(dir=dir_errors)
+            a.save(os.path.join(tmpdir, "a.png"))
+            b.save(os.path.join(tmpdir, "b.png"))
+            return tmpdir
+
+
+else:
+    try:
+        import test_image_results
+
+        HAS_UPLOADER = True
+    except ImportError:
+        pass
 
 
 def convert_to_comparable(a, b):
     new_a, new_b = a, b
-    if a.mode == 'P':
-        new_a = Image.new('L', a.size)
-        new_b = Image.new('L', b.size)
+    if a.mode == "P":
+        new_a = Image.new("L", a.size)
+        new_b = Image.new("L", b.size)
         new_a.putdata(a.getdata())
         new_b.putdata(b.getdata())
-    elif a.mode == 'I;16':
-        new_a = a.convert('I')
-        new_b = b.convert('I')
+    elif a.mode == "I;16":
+        new_a = a.convert("I")
+        new_b = b.convert("I")
     return new_a, new_b
 
 
-class PillowTestCase(unittest.TestCase):
+def assert_deep_equal(a, b, msg=None):
+    try:
+        assert len(a) == len(b), msg or "got length {}, expected {}".format(
+            len(a), len(b)
+        )
+    except Exception:
+        assert a == b, msg
 
-    def __init__(self, *args, **kwargs):
-        unittest.TestCase.__init__(self, *args, **kwargs)
-        # holds last result object passed to run method:
-        self.currentResult = None
 
-    # Nicer output for --verbose
-    def __str__(self):
-        return self.__class__.__name__ + "." + self._testMethodName
+def assert_image(im, mode, size, msg=None):
+    if mode is not None:
+        assert im.mode == mode, msg or "got mode {!r}, expected {!r}".format(
+            im.mode, mode
+        )
 
-    def run(self, result=None):
-        self.currentResult = result  # remember result for use later
-        unittest.TestCase.run(self, result)  # call superclass run method
+    if size is not None:
+        assert im.size == size, msg or "got size {!r}, expected {!r}".format(
+            im.size, size
+        )
 
-    def delete_tempfile(self, path):
-        try:
-            ok = self.currentResult.wasSuccessful()
-        except AttributeError:  # for nosetests
-            proxy = self.currentResult
-            ok = (len(proxy.errors) + len(proxy.failures) == 0)
 
-        if ok:
-            # only clean out tempfiles if test passed
+def assert_image_equal(a, b, msg=None):
+    assert a.mode == b.mode, msg or "got mode {!r}, expected {!r}".format(
+        a.mode, b.mode
+    )
+    assert a.size == b.size, msg or "got size {!r}, expected {!r}".format(
+        a.size, b.size
+    )
+    if a.tobytes() != b.tobytes():
+        if HAS_UPLOADER:
             try:
-                os.remove(path)
-            except OSError:
-                pass  # report?
+                url = test_image_results.upload(a, b)
+                logger.error("Url for test images: %s" % url)
+            except Exception:
+                pass
+
+        assert False, msg or "got different content"
+
+
+def assert_image_equal_tofile(a, filename, msg=None, mode=None):
+    with Image.open(filename) as img:
+        if mode:
+            img = img.convert(mode)
+        assert_image_equal(a, img, msg)
+
+
+def assert_image_similar(a, b, epsilon, msg=None):
+    assert a.mode == b.mode, msg or "got mode {!r}, expected {!r}".format(
+        a.mode, b.mode
+    )
+    assert a.size == b.size, msg or "got size {!r}, expected {!r}".format(
+        a.size, b.size
+    )
+
+    a, b = convert_to_comparable(a, b)
+
+    diff = 0
+    for ach, bch in zip(a.split(), b.split()):
+        chdiff = ImageMath.eval("abs(a - b)", a=ach, b=bch).convert("L")
+        diff += sum(i * num for i, num in enumerate(chdiff.histogram()))
+
+    ave_diff = diff / (a.size[0] * a.size[1])
+    try:
+        assert epsilon >= ave_diff, (
+            msg or ""
+        ) + " average pixel value difference %.4f > epsilon %.4f" % (ave_diff, epsilon)
+    except Exception as e:
+        if HAS_UPLOADER:
+            try:
+                url = test_image_results.upload(a, b)
+                logger.error("Url for test images: %s" % url)
+            except Exception:
+                pass
+        raise e
+
+
+def assert_image_similar_tofile(a, filename, epsilon, msg=None, mode=None):
+    with Image.open(filename) as img:
+        if mode:
+            img = img.convert(mode)
+        assert_image_similar(a, img, epsilon, msg)
+
+
+def assert_all_same(items, msg=None):
+    assert items.count(items[0]) == len(items), msg
+
+
+def assert_not_all_same(items, msg=None):
+    assert items.count(items[0]) != len(items), msg
+
+
+def assert_tuple_approx_equal(actuals, targets, threshold, msg):
+    """Tests if actuals has values within threshold from targets"""
+    value = True
+    for i, target in enumerate(targets):
+        value *= target - threshold <= actuals[i] <= target + threshold
+
+    assert value, msg + ": " + repr(actuals) + " != " + repr(targets)
+
+
+def skip_known_bad_test(msg=None):
+    # Skip if PILLOW_RUN_KNOWN_BAD is not true in the environment.
+    if not os.environ.get("PILLOW_RUN_KNOWN_BAD", False):
+        pytest.skip(msg or "Known bad test")
+
+
+def skip_unless_feature(feature):
+    reason = "%s not available" % feature
+    return pytest.mark.skipif(not features.check(feature), reason=reason)
+
+
+@pytest.mark.skipif(sys.platform.startswith("win32"), reason="Requires Unix or macOS")
+class PillowLeakTestCase:
+    # requires unix/macOS
+    iterations = 100  # count
+    mem_limit = 512  # k
+
+    def _get_mem_usage(self):
+        """
+        Gets the RUSAGE memory usage, returns in K. Encapsulates the difference
+        between macOS and Linux rss reporting
+
+        :returns: memory usage in kilobytes
+        """
+
+        from resource import getrusage, RUSAGE_SELF
+
+        mem = getrusage(RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            # man 2 getrusage:
+            #     ru_maxrss
+            # This is the maximum resident set size utilized (in bytes).
+            return mem / 1024  # Kb
         else:
-            print("=== orphaned temp file: %s" % path)
+            # linux
+            # man 2 getrusage
+            #        ru_maxrss (since Linux 2.6.32)
+            #  This is the maximum resident set size used (in kilobytes).
+            return mem  # Kb
 
-    def assert_deep_equal(self, a, b, msg=None):
-        try:
-            self.assertEqual(
-                len(a), len(b),
-                msg or "got length %s, expected %s" % (len(a), len(b)))
-            self.assertTrue(
-                all(x == y for x, y in zip(a, b)),
-                msg or "got %s, expected %s" % (a, b))
-        except:
-            self.assertEqual(a, b, msg)
-
-    def assert_image(self, im, mode, size, msg=None):
-        if mode is not None:
-            self.assertEqual(
-                im.mode, mode,
-                msg or "got mode %r, expected %r" % (im.mode, mode))
-
-        if size is not None:
-            self.assertEqual(
-                im.size, size,
-                msg or "got size %r, expected %r" % (im.size, size))
-
-    def assert_image_equal(self, a, b, msg=None):
-        self.assertEqual(
-            a.mode, b.mode,
-            msg or "got mode %r, expected %r" % (a.mode, b.mode))
-        self.assertEqual(
-            a.size, b.size,
-            msg or "got size %r, expected %r" % (a.size, b.size))
-        if a.tobytes() != b.tobytes():
-            self.fail(msg or "got different content")
-
-    def assert_image_similar(self, a, b, epsilon, msg=None):
-        epsilon = float(epsilon)
-        self.assertEqual(
-            a.mode, b.mode,
-            msg or "got mode %r, expected %r" % (a.mode, b.mode))
-        self.assertEqual(
-            a.size, b.size,
-            msg or "got size %r, expected %r" % (a.size, b.size))
-
-        a, b = convert_to_comparable(a, b)
-
-        diff = 0
-        for ach, bch in zip(a.split(), b.split()):
-            chdiff = ImageMath.eval("abs(a - b)", a=ach, b=bch).convert('L')
-            diff += sum(i * num for i, num in enumerate(chdiff.histogram()))
-
-        ave_diff = float(diff)/(a.size[0]*a.size[1])
-        self.assertGreaterEqual(
-            epsilon, ave_diff,
-            (msg or '') +
-            " average pixel value difference %.4f > epsilon %.4f" % (
-                ave_diff, epsilon))
-
-    def assert_warning(self, warn_class, func, *args, **kwargs):
-        import warnings
-
-        result = None
-        with warnings.catch_warnings(record=True) as w:
-            # Cause all warnings to always be triggered.
-            warnings.simplefilter("always")
-
-            # Hopefully trigger a warning.
-            result = func(*args, **kwargs)
-
-            # Verify some things.
-            self.assertGreaterEqual(len(w), 1)
-            found = False
-            for v in w:
-                if issubclass(v.category, warn_class):
-                    found = True
-                    break
-            self.assertTrue(found)
-        return result
-
-    def skipKnownBadTest(self, msg=None, platform=None,
-                         travis=None, interpreter=None):
-        # Skip if platform/travis matches, and
-        # PILLOW_RUN_KNOWN_BAD is not true in the environment.
-        if bool(os.environ.get('PILLOW_RUN_KNOWN_BAD', False)):
-            print(os.environ.get('PILLOW_RUN_KNOWN_BAD', False))
-            return
-
-        skip = True
-        if platform is not None:
-            skip = sys.platform.startswith(platform)
-        if travis is not None:
-            skip = skip and (travis == bool(os.environ.get('TRAVIS', False)))
-        if interpreter is not None:
-            skip = skip and (interpreter == 'pypy' and
-                             hasattr(sys, 'pypy_version_info'))
-        if skip:
-            self.skipTest(msg or "Known Bad Test")
-
-    def shortDescription(self):
-        # Prevents `nose -v` printing docstrings
-        return None
-
-    def tempfile(self, template):
-        assert template[:5] in ("temp.", "temp_")
-        fd, path = tempfile.mkstemp(template[4:], template[:4])
-        os.close(fd)
-
-        self.addCleanup(self.delete_tempfile, path)
-        return path
-
-    def open_withImagemagick(self, f):
-        if not imagemagick_available():
-            raise IOError()
-
-        outfile = self.tempfile("temp.png")
-        if command_succeeds([IMCONVERT, f, outfile]):
-            return Image.open(outfile)
-        raise IOError()
+    def _test_leak(self, core):
+        start_mem = self._get_mem_usage()
+        for cycle in range(self.iterations):
+            core()
+            mem = self._get_mem_usage() - start_mem
+            msg = "memory usage limit exceeded in iteration %d" % cycle
+            assert mem < self.mem_limit, msg
 
 
 # helpers
 
-py3 = (sys.version_info >= (3, 0))
-
 
 def fromstring(data):
-    from io import BytesIO
     return Image.open(BytesIO(data))
 
 
 def tostring(im, string_format, **options):
-    from io import BytesIO
     out = BytesIO()
     im.save(out, string_format, **options)
     return out.getvalue()
@@ -209,57 +247,56 @@ def hopper(mode=None, cache={}):
     return im.copy()
 
 
-def command_succeeds(cmd):
-    """
-    Runs the command, which must be a list of strings. Returns True if the
-    command succeeds, or False if an OSError was raised by subprocess.Popen.
-    """
-    import subprocess
-    with open(os.devnull, 'wb') as f:
-        try:
-            subprocess.call(cmd, stdout=f, stderr=subprocess.STDOUT)
-        except OSError:
-            return False
-    return True
-
-
 def djpeg_available():
-    return command_succeeds(['djpeg', '-version'])
+    return bool(shutil.which("djpeg"))
 
 
 def cjpeg_available():
-    return command_succeeds(['cjpeg', '-version'])
+    return bool(shutil.which("cjpeg"))
 
 
 def netpbm_available():
-    return (command_succeeds(["ppmquant", "--version"]) and
-            command_succeeds(["ppmtogif", "--version"]))
+    return bool(shutil.which("ppmquant") and shutil.which("ppmtogif"))
 
 
 def imagemagick_available():
-    return IMCONVERT and command_succeeds([IMCONVERT, '-version'])
+    return bool(IMCONVERT and shutil.which(IMCONVERT))
 
 
 def on_appveyor():
-    return 'APPVEYOR' in os.environ
+    return "APPVEYOR" in os.environ
 
-if sys.platform == 'win32':
-    IMCONVERT = os.environ.get('MAGICK_HOME', '')
+
+def on_github_actions():
+    return "GITHUB_ACTIONS" in os.environ
+
+
+def on_ci():
+    # GitHub Actions, Travis and AppVeyor have "CI"
+    return "CI" in os.environ
+
+
+def is_big_endian():
+    return sys.byteorder == "big"
+
+
+def is_win32():
+    return sys.platform.startswith("win32")
+
+
+def is_pypy():
+    return hasattr(sys, "pypy_translation_info")
+
+
+if sys.platform == "win32":
+    IMCONVERT = os.environ.get("MAGICK_HOME", "")
     if IMCONVERT:
-        IMCONVERT = os.path.join(IMCONVERT, 'convert.exe')
+        IMCONVERT = os.path.join(IMCONVERT, "convert.exe")
 else:
-    IMCONVERT = 'convert'
+    IMCONVERT = "convert"
 
 
-def distro():
-    if os.path.exists('/etc/os-release'):
-        with open('/etc/os-release', 'r') as f:
-            for line in f:
-                if 'ID=' in line:
-                    return line.strip().split('=')[1]
-
-
-class cached_property(object):
+class cached_property:
     def __init__(self, func):
         self.func = func
 

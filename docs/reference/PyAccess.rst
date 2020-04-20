@@ -18,8 +18,8 @@ The following script loads an image, accesses one pixel from it, then changes it
 .. code-block:: python
 
     from PIL import Image
-    im = Image.open('hopper.jpg')
-    px = im.load()
+    with Image.open('hopper.jpg') as im:
+        px = im.load()
     print (px[4,4])
     px[4,4] = (0,0,0)
     print (px[4,4])
@@ -28,6 +28,13 @@ Results in the following::
 
     (23, 24, 68)
     (0, 0, 0)
+
+Access using negative indexes is also possible.
+
+.. code-block:: python
+
+    px[-1,-1] = (0,0,0)
+    print (px[-1,-1])
 
 
 

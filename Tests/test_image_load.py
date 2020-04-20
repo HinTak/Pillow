@@ -1,33 +1,40 @@
-from helper import unittest, PillowTestCase, hopper
-
-from PIL import Image
-
 import os
 
+import pytest
+from PIL import Image
 
-class TestImageLoad(PillowTestCase):
+from .helper import hopper
 
-    def test_sanity(self):
 
-        im = hopper()
+def test_sanity():
+    im = hopper()
+    pix = im.load()
 
-        pix = im.load()
+    assert pix[0, 0] == (20, 20, 70)
 
-        self.assertEqual(pix[0, 0], (20, 20, 70))
 
-    def test_close(self):
-        im = Image.open("Tests/images/hopper.gif")
-        im.close()
-        self.assertRaises(ValueError, im.load)
-        self.assertRaises(ValueError, lambda: im.getpixel((0, 0)))
+def test_close():
+    im = Image.open("Tests/images/hopper.gif")
+    im.close()
+    with pytest.raises(ValueError):
+        im.load()
+    with pytest.raises(ValueError):
+        im.getpixel((0, 0))
 
-    def test_contextmanager(self):
-        fn = None
-        with Image.open("Tests/images/hopper.gif") as im:
-            fn = im.fp.fileno()
-            os.fstat(fn)
 
-        self.assertRaises(OSError, lambda: os.fstat(fn))
+def test_contextmanager():
+    fn = None
+    with Image.open("Tests/images/hopper.gif") as im:
+        fn = im.fp.fileno()
+        os.fstat(fn)
 
-if __name__ == '__main__':
-    unittest.main()
+    with pytest.raises(OSError):
+        os.fstat(fn)
+
+
+def test_contextmanager_non_exclusive_fp():
+    with open("Tests/images/hopper.gif", "rb") as fp:
+        with Image.open(fp):
+            pass
+
+        assert not fp.closed

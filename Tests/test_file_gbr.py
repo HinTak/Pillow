@@ -1,22 +1,17 @@
-from helper import unittest, PillowTestCase
+import pytest
+from PIL import GbrImagePlugin, Image
 
-from PIL import Image, GbrImagePlugin
+from .helper import assert_image_equal
 
 
-class TestFileGbr(PillowTestCase):
+def test_invalid_file():
+    invalid_file = "Tests/images/flower.jpg"
 
-    def test_invalid_file(self):
-        invalid_file = "Tests/images/flower.jpg"
+    with pytest.raises(SyntaxError):
+        GbrImagePlugin.GbrImageFile(invalid_file)
 
-        self.assertRaises(SyntaxError,
-                          lambda: GbrImagePlugin.GbrImageFile(invalid_file))
 
-    def test_gbr_file(self):
-        im = Image.open('Tests/images/gbr.gbr')
-
-        target = Image.open('Tests/images/gbr.png')
-
-        self.assert_image_equal(target, im)
-
-if __name__ == '__main__':
-    unittest.main()
+def test_gbr_file():
+    with Image.open("Tests/images/gbr.gbr") as im:
+        with Image.open("Tests/images/gbr.png") as target:
+            assert_image_equal(target, im)

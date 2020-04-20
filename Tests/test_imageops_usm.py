@@ -1,91 +1,110 @@
-from helper import unittest, PillowTestCase
-
-from PIL import Image
-from PIL import ImageOps
-from PIL import ImageFilter
-
-im = Image.open("Tests/images/hopper.ppm")
-snakes = Image.open("Tests/images/color_snakes.png")
+import pytest
+from PIL import Image, ImageFilter
 
 
-class TestImageOpsUsm(PillowTestCase):
+@pytest.fixture
+def test_images():
+    ims = {
+        "im": Image.open("Tests/images/hopper.ppm"),
+        "snakes": Image.open("Tests/images/color_snakes.png"),
+    }
+    try:
+        yield ims
+    finally:
+        for im in ims.values():
+            im.close()
 
-    def test_ops_api(self):
 
-        i = ImageOps.gaussian_blur(im, 2.0)
-        self.assertEqual(i.mode, "RGB")
-        self.assertEqual(i.size, (128, 128))
-        # i.save("blur.bmp")
+def test_filter_api(test_images):
+    im = test_images["im"]
 
-        i = ImageOps.unsharp_mask(im, 2.0, 125, 8)
-        self.assertEqual(i.mode, "RGB")
-        self.assertEqual(i.size, (128, 128))
-        # i.save("usm.bmp")
+    test_filter = ImageFilter.GaussianBlur(2.0)
+    i = im.filter(test_filter)
+    assert i.mode == "RGB"
+    assert i.size == (128, 128)
 
-    def test_filter_api(self):
+    test_filter = ImageFilter.UnsharpMask(2.0, 125, 8)
+    i = im.filter(test_filter)
+    assert i.mode == "RGB"
+    assert i.size == (128, 128)
 
-        test_filter = ImageFilter.GaussianBlur(2.0)
-        i = im.filter(test_filter)
-        self.assertEqual(i.mode, "RGB")
-        self.assertEqual(i.size, (128, 128))
 
-        test_filter = ImageFilter.UnsharpMask(2.0, 125, 8)
-        i = im.filter(test_filter)
-        self.assertEqual(i.mode, "RGB")
-        self.assertEqual(i.size, (128, 128))
+def test_usm_formats(test_images):
+    im = test_images["im"]
 
-    def test_usm_formats(self):
+    usm = ImageFilter.UnsharpMask
+    with pytest.raises(ValueError):
+        im.convert("1").filter(usm)
+    im.convert("L").filter(usm)
+    with pytest.raises(ValueError):
+        im.convert("I").filter(usm)
+    with pytest.raises(ValueError):
+        im.convert("F").filter(usm)
+    im.convert("RGB").filter(usm)
+    im.convert("RGBA").filter(usm)
+    im.convert("CMYK").filter(usm)
+    with pytest.raises(ValueError):
+        im.convert("YCbCr").filter(usm)
 
-        usm = ImageOps.unsharp_mask
-        self.assertRaises(ValueError, lambda: usm(im.convert("1")))
-        usm(im.convert("L"))
-        self.assertRaises(ValueError, lambda: usm(im.convert("I")))
-        self.assertRaises(ValueError, lambda: usm(im.convert("F")))
-        usm(im.convert("RGB"))
-        usm(im.convert("RGBA"))
-        usm(im.convert("CMYK"))
-        self.assertRaises(ValueError, lambda: usm(im.convert("YCbCr")))
 
-    def test_blur_formats(self):
+def test_blur_formats(test_images):
+    im = test_images["im"]
 
-        blur = ImageOps.gaussian_blur
-        self.assertRaises(ValueError, lambda: blur(im.convert("1")))
-        blur(im.convert("L"))
-        self.assertRaises(ValueError, lambda: blur(im.convert("I")))
-        self.assertRaises(ValueError, lambda: blur(im.convert("F")))
-        blur(im.convert("RGB"))
-        blur(im.convert("RGBA"))
-        blur(im.convert("CMYK"))
-        self.assertRaises(ValueError, lambda: blur(im.convert("YCbCr")))
+    blur = ImageFilter.GaussianBlur
+    with pytest.raises(ValueError):
+        im.convert("1").filter(blur)
+    blur(im.convert("L"))
+    with pytest.raises(ValueError):
+        im.convert("I").filter(blur)
+    with pytest.raises(ValueError):
+        im.convert("F").filter(blur)
+    im.convert("RGB").filter(blur)
+    im.convert("RGBA").filter(blur)
+    im.convert("CMYK").filter(blur)
+    with pytest.raises(ValueError):
+        im.convert("YCbCr").filter(blur)
 
-    def test_usm_accuracy(self):
 
-        src = snakes.convert('RGB')
-        i = src._new(ImageOps.unsharp_mask(src, 5, 1024, 0))
-        # Image should not be changed because it have only 0 and 255 levels.
-        self.assertEqual(i.tobytes(), src.tobytes())
+def test_usm_accuracy(test_images):
+    snakes = test_images["snakes"]
 
-    def test_blur_accuracy(self):
+    src = snakes.convert("RGB")
+    i = src.filter(ImageFilter.UnsharpMask(5, 1024, 0))
+    # Image should not be changed because it have only 0 and 255 levels.
+    assert i.tobytes() == src.tobytes()
 
-        i = snakes._new(ImageOps.gaussian_blur(snakes, .4))
-        # These pixels surrounded with pixels with 255 intensity.
-        # They must be very close to 255.
-        for x, y, c in [(1, 0, 1), (2, 0, 1), (7, 8, 1), (8, 8, 1), (2, 9, 1),
-                        (7, 3, 0), (8, 3, 0), (5, 8, 0), (5, 9, 0), (1, 3, 0),
-                        (4, 3, 2), (4, 2, 2)]:
-            self.assertGreaterEqual(i.im.getpixel((x, y))[c], 250)
-        # Fuzzy match.
 
-        def gp(x, y):
-            return i.im.getpixel((x, y))
-        self.assertTrue(236 <= gp(7, 4)[0] <= 239)
-        self.assertTrue(236 <= gp(7, 5)[2] <= 239)
-        self.assertTrue(236 <= gp(7, 6)[2] <= 239)
-        self.assertTrue(236 <= gp(7, 7)[1] <= 239)
-        self.assertTrue(236 <= gp(8, 4)[0] <= 239)
-        self.assertTrue(236 <= gp(8, 5)[2] <= 239)
-        self.assertTrue(236 <= gp(8, 6)[2] <= 239)
-        self.assertTrue(236 <= gp(8, 7)[1] <= 239)
+def test_blur_accuracy(test_images):
+    snakes = test_images["snakes"]
 
-if __name__ == '__main__':
-    unittest.main()
+    i = snakes.filter(ImageFilter.GaussianBlur(0.4))
+    # These pixels surrounded with pixels with 255 intensity.
+    # They must be very close to 255.
+    for x, y, c in [
+        (1, 0, 1),
+        (2, 0, 1),
+        (7, 8, 1),
+        (8, 8, 1),
+        (2, 9, 1),
+        (7, 3, 0),
+        (8, 3, 0),
+        (5, 8, 0),
+        (5, 9, 0),
+        (1, 3, 0),
+        (4, 3, 2),
+        (4, 2, 2),
+    ]:
+        assert i.im.getpixel((x, y))[c] >= 250
+    # Fuzzy match.
+
+    def gp(x, y):
+        return i.im.getpixel((x, y))
+
+    assert 236 <= gp(7, 4)[0] <= 239
+    assert 236 <= gp(7, 5)[2] <= 239
+    assert 236 <= gp(7, 6)[2] <= 239
+    assert 236 <= gp(7, 7)[1] <= 239
+    assert 236 <= gp(8, 4)[0] <= 239
+    assert 236 <= gp(8, 5)[2] <= 239
+    assert 236 <= gp(8, 6)[2] <= 239
+    assert 236 <= gp(8, 7)[1] <= 239
