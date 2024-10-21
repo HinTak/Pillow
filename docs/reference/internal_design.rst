@@ -1,5 +1,5 @@
-Internal Reference Docs
-=======================
+Internal Reference
+==================
 
 .. toctree::
   :maxdepth: 2
@@ -7,4 +7,5 @@ Internal Reference Docs
   open_files
   limits
   block_allocator
-
+  internal_modules
+  c_extension_debugging

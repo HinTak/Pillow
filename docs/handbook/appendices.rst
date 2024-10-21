@@ -7,4 +7,5 @@ Appendices
   :maxdepth: 2
 
   image-file-formats
-  writing-your-own-file-decoder
+  text-anchors
+  writing-your-own-image-plugin

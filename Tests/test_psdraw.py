@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import os
 import sys
-from io import StringIO
+from io import BytesIO
+from pathlib import Path
 
 from PIL import Image, PSDraw
 
 
-def _create_document(ps):
+def _create_document(ps: PSDraw.PSDraw) -> None:
     title = "hopper"
     box = (1 * 72, 2 * 72, 7 * 72, 10 * 72)  # in points
 
@@ -27,7 +30,7 @@ def _create_document(ps):
     ps.end_document()
 
 
-def test_draw_postscript(tmp_path):
+def test_draw_postscript(tmp_path: Path) -> None:
     # Based on Pillow tutorial, but there is no textsize:
     # https://pillow.readthedocs.io/en/latest/handbook/tutorial.html#drawing-postscript
 
@@ -44,10 +47,16 @@ def test_draw_postscript(tmp_path):
     assert os.path.getsize(tempfile) > 0
 
 
-def test_stdout():
+def test_stdout() -> None:
     # Temporarily redirect stdout
     old_stdout = sys.stdout
-    sys.stdout = mystdout = StringIO()
+
+    class MyStdOut:
+        buffer = BytesIO()
+
+    mystdout = MyStdOut()
+
+    sys.stdout = mystdout
 
     ps = PSDraw.PSDraw()
     _create_document(ps)
@@ -55,4 +64,4 @@ def test_stdout():
     # Reset stdout
     sys.stdout = old_stdout
 
-    assert mystdout.getvalue() != ""
+    assert mystdout.buffer.getvalue() != b""

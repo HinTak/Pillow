@@ -1,21 +1,23 @@
+from __future__ import annotations
+
 import os
 
 import pytest
+
 from PIL import Image, SunImagePlugin
 
-from .helper import assert_image_equal, assert_image_similar, hopper
+from .helper import assert_image_equal_tofile, assert_image_similar, hopper
 
 EXTRA_DIR = "Tests/images/sunraster"
 
 
-def test_sanity():
+def test_sanity() -> None:
     # Arrange
     # Created with ImageMagick: convert hopper.jpg hopper.ras
     test_file = "Tests/images/hopper.ras"
 
     # Act
     with Image.open(test_file) as im:
-
         # Assert
         assert im.size == (128, 128)
 
@@ -26,16 +28,15 @@ def test_sanity():
         SunImagePlugin.SunImageFile(invalid_file)
 
 
-def test_im1():
+def test_im1() -> None:
     with Image.open("Tests/images/sunraster.im1") as im:
-        with Image.open("Tests/images/sunraster.im1.png") as target:
-            assert_image_equal(im, target)
+        assert_image_equal_tofile(im, "Tests/images/sunraster.im1.png")
 
 
 @pytest.mark.skipif(
     not os.path.exists(EXTRA_DIR), reason="Extra image files not installed"
 )
-def test_others():
+def test_others() -> None:
     files = (
         os.path.join(EXTRA_DIR, f)
         for f in os.listdir(EXTRA_DIR)
@@ -45,7 +46,4 @@ def test_others():
         with Image.open(path) as im:
             im.load()
             assert isinstance(im, SunImagePlugin.SunImageFile)
-            target_path = "%s.png" % os.path.splitext(path)[0]
-            # im.save(target_file)
-            with Image.open(target_path) as target:
-                assert_image_equal(im, target)
+            assert_image_equal_tofile(im, f"{os.path.splitext(path)[0]}.png")

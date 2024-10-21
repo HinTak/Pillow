@@ -1,6 +1,8 @@
-import os
+from __future__ import annotations
 
-import pytest
+import os
+import warnings
+
 from PIL import Image
 
 from .helper import assert_image_similar
@@ -8,56 +10,58 @@ from .helper import assert_image_similar
 base = os.path.join("Tests", "images", "bmp")
 
 
-def get_files(d, ext=".bmp"):
+def get_files(d: str, ext: str = ".bmp") -> list[str]:
     return [
         os.path.join(base, d, f) for f in os.listdir(os.path.join(base, d)) if ext in f
     ]
 
 
-def test_bad():
-    """ These shouldn't crash/dos, but they shouldn't return anything
-    either """
+def test_bad() -> None:
+    """These shouldn't crash/dos, but they shouldn't return anything
+    either"""
     for f in get_files("b"):
-
-        def open(f):
+        # Assert that there is no unclosed file warning
+        with warnings.catch_warnings():
             try:
                 with Image.open(f) as im:
                     im.load()
             except Exception:  # as msg:
                 pass
 
-        # Assert that there is no unclosed file warning
-        pytest.warns(None, open, f)
 
-
-def test_questionable():
-    """ These shouldn't crash/dos, but it's not well defined that these
-    are in spec """
+def test_questionable() -> None:
+    """These shouldn't crash/dos, but it's not well defined that these
+    are in spec"""
     supported = [
         "pal8os2v2.bmp",
         "rgb24prof.bmp",
         "pal1p1.bmp",
+        "pal4rletrns.bmp",
         "pal8offs.bmp",
         "rgb24lprof.bmp",
         "rgb32fakealpha.bmp",
         "rgb24largepal.bmp",
         "pal8os2sp.bmp",
+        "pal8rletrns.bmp",
         "rgb32bf-xbgr.bmp",
+        "rgba32.bmp",
+        "rgb32h52.bmp",
+        "rgba32h56.bmp",
     ]
     for f in get_files("q"):
         try:
             with Image.open(f) as im:
                 im.load()
             if os.path.basename(f) not in supported:
-                print("Please add %s to the partially supported bmp specs." % f)
+                print(f"Please add {f} to the partially supported bmp specs.")
         except Exception:  # as msg:
             if os.path.basename(f) in supported:
                 raise
 
 
-def test_good():
-    """ These should all work. There's a set of target files in the
-    html directory that we can compare against. """
+def test_good() -> None:
+    """These should all work. There's a set of target files in the
+    html directory that we can compare against."""
 
     # Target files, if they're not just replacing the extension
     file_map = {
@@ -79,12 +83,12 @@ def test_good():
         "rgb32bf.bmp": "rgb24.png",
     }
 
-    def get_compare(f):
+    def get_compare(f: str) -> str:
         name = os.path.split(f)[1]
         if name in file_map:
             return os.path.join(base, "html", file_map[name])
         name = os.path.splitext(name)[0]
-        return os.path.join(base, "html", "%s.png" % name)
+        return os.path.join(base, "html", f"{name}.png")
 
     for f in get_files("g"):
         try:
@@ -107,4 +111,4 @@ def test_good():
                 os.path.join(base, "g", "pal8rle.bmp"),
                 os.path.join(base, "g", "pal4rle.bmp"),
             )
-            assert f in unsupported, "Unsupported Image {}: {}".format(f, msg)
+            assert f in unsupported, f"Unsupported Image {f}: {msg}"

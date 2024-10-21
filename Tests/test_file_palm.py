@@ -1,21 +1,17 @@
+from __future__ import annotations
+
 import os.path
 import subprocess
+from pathlib import Path
 
 import pytest
+
 from PIL import Image
 
-from .helper import (
-    IMCONVERT,
-    assert_image_equal,
-    hopper,
-    imagemagick_available,
-    skip_known_bad_test,
-)
-
-_roundtrip = imagemagick_available()
+from .helper import assert_image_equal, hopper, magick_command
 
 
-def helper_save_as_palm(tmp_path, mode):
+def helper_save_as_palm(tmp_path: Path, mode: str) -> None:
     # Arrange
     im = hopper(mode)
     outfile = str(tmp_path / ("temp_" + mode + ".palm"))
@@ -28,32 +24,29 @@ def helper_save_as_palm(tmp_path, mode):
     assert os.path.getsize(outfile) > 0
 
 
-def open_with_imagemagick(tmp_path, f):
-    if not imagemagick_available():
-        raise OSError()
-
+def open_with_magick(magick: list[str], tmp_path: Path, f: str) -> Image.Image:
     outfile = str(tmp_path / "temp.png")
     rc = subprocess.call(
-        [IMCONVERT, f, outfile], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        magick + [f, outfile], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
     )
-    if rc:
-        raise OSError
+    assert not rc
     return Image.open(outfile)
 
 
-def roundtrip(tmp_path, mode):
-    if not _roundtrip:
+def roundtrip(tmp_path: Path, mode: str) -> None:
+    magick = magick_command()
+    if not magick:
         return
 
     im = hopper(mode)
     outfile = str(tmp_path / "temp.palm")
 
     im.save(outfile)
-    converted = open_with_imagemagick(tmp_path, outfile)
+    converted = open_with_magick(magick, tmp_path, outfile)
     assert_image_equal(converted, im)
 
 
-def test_monochrome(tmp_path):
+def test_monochrome(tmp_path: Path) -> None:
     # Arrange
     mode = "1"
 
@@ -62,29 +55,17 @@ def test_monochrome(tmp_path):
     roundtrip(tmp_path, mode)
 
 
-def test_p_mode(tmp_path):
+@pytest.mark.xfail(reason="Palm P image is wrong")
+def test_p_mode(tmp_path: Path) -> None:
     # Arrange
     mode = "P"
 
     # Act / Assert
     helper_save_as_palm(tmp_path, mode)
-    skip_known_bad_test("Palm P image is wrong")
     roundtrip(tmp_path, mode)
 
 
-def test_l_oserror(tmp_path):
-    # Arrange
-    mode = "L"
-
-    # Act / Assert
-    with pytest.raises(OSError):
-        helper_save_as_palm(tmp_path, mode)
-
-
-def test_rgb_oserror(tmp_path):
-    # Arrange
-    mode = "RGB"
-
-    # Act / Assert
+@pytest.mark.parametrize("mode", ("L", "RGB"))
+def test_oserror(tmp_path: Path, mode: str) -> None:
     with pytest.raises(OSError):
         helper_save_as_palm(tmp_path, mode)

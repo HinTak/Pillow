@@ -1,5 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # minimal sanity check
+from __future__ import annotations
 
 import sys
 
@@ -14,17 +15,13 @@ except AttributeError:
     pass
 
 
-def _info(im):
-    im.load()
-    return im.format, im.mode, im.size
-
-
-def testimage():
+def testimage() -> None:
     """
     PIL lets you create in-memory images with various pixel types:
 
     >>> from PIL import Image, ImageDraw, ImageFilter, ImageMath
     >>> im = Image.new("1", (128, 128)) # monochrome
+    >>> def _info(im): return im.format, im.mode, im.size
     >>> _info(im)
     (None, '1', (128, 128))
     >>> _info(Image.new("L", (128, 128))) # grayscale (luminance)
@@ -55,7 +52,7 @@ def testimage():
     or you call the "load" method:
 
     >>> im = Image.open("Tests/images/hopper.ppm")
-    >>> print(im.im) # internal image attribute
+    >>> print(im._im) # internal image attribute
     None
     >>> a = im.load()
     >>> type(im.im) # doctest: +ELLIPSIS
@@ -101,9 +98,9 @@ def testimage():
     10456
     >>> len(im.tobytes())
     49152
-    >>> _info(im.transform((512, 512), Image.AFFINE, (1,0,0,0,1,0)))
+    >>> _info(im.transform((512, 512), Image.Transform.AFFINE, (1,0,0,0,1,0)))
     (None, 'RGB', (512, 512))
-    >>> _info(im.transform((512, 512), Image.EXTENT, (32,32,96,96)))
+    >>> _info(im.transform((512, 512), Image.Transform.EXTENT, (32,32,96,96)))
     (None, 'RGB', (512, 512))
 
     The ImageDraw module lets you draw stuff in raster images:
@@ -142,14 +139,14 @@ def testimage():
     In 1.1.6, you can use the ImageMath module to do image
     calculations.
 
-    >>> im = ImageMath.eval("float(im + 20)", im=im.convert("L"))
+    >>> im = ImageMath.lambda_eval( \
+      lambda args: args["float"](args["im"] + 20), im=im.convert("L") \
+    )
     >>> im.mode, im.size
     ('F', (128, 128))
 
     PIL can do many other things, but I'll leave that for another
-    day.  If you're curious, check the handbook, available from:
-
-        http://www.pythonware.com
+    day.
 
     Cheers /F
     """
@@ -168,9 +165,9 @@ if __name__ == "__main__":
     print("Running selftest:")
     status = doctest.testmod(sys.modules[__name__])
     if status[0]:
-        print("*** %s tests of %d failed." % status)
+        print(f"*** {status[0]} tests of {status[1]} failed.")
         exit_status = 1
     else:
-        print("--- %s tests passed." % status[1])
+        print(f"--- {status[1]} tests passed.")
 
     sys.exit(exit_status)

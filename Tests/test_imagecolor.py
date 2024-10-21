@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import pytest
+
 from PIL import Image, ImageColor
 
 
-def test_hash():
+def test_hash() -> None:
     # short 3 components
     assert (255, 0, 0) == ImageColor.getrgb("#f00")
     assert (0, 255, 0) == ImageColor.getrgb("#0f0")
@@ -54,7 +57,7 @@ def test_hash():
         ImageColor.getrgb("#f00000 ")
 
 
-def test_colormap():
+def test_colormap() -> None:
     assert (0, 0, 0) == ImageColor.getrgb("black")
     assert (255, 255, 255) == ImageColor.getrgb("white")
     assert (255, 255, 255) == ImageColor.getrgb("WHITE")
@@ -63,7 +66,7 @@ def test_colormap():
         ImageColor.getrgb("black ")
 
 
-def test_functions():
+def test_functions() -> None:
     # rgb numbers
     assert (255, 0, 0) == ImageColor.getrgb("rgb(255,0,0)")
     assert (0, 255, 0) == ImageColor.getrgb("rgb(0,255,0)")
@@ -157,7 +160,7 @@ def test_functions():
 
 
 # look for rounding errors (based on code by Tim Hatch)
-def test_rounding_errors():
+def test_rounding_errors() -> None:
     for color in ImageColor.colormap:
         expected = Image.new("RGB", (1, 1), color).convert("L").getpixel((0, 0))
         actual = ImageColor.getcolor(color, "L")
@@ -190,3 +193,16 @@ def test_rounding_errors():
     assert (255, 255) == ImageColor.getcolor("white", "LA")
     assert (163, 33) == ImageColor.getcolor("rgba(0, 255, 115, 33)", "LA")
     Image.new("LA", (1, 1), "white")
+
+
+def test_color_hsv() -> None:
+    assert (170, 255, 255) == ImageColor.getcolor("hsv(240, 100%, 100%)", "HSV")
+
+
+def test_color_too_long() -> None:
+    # Arrange
+    color_too_long = "hsl(" + "1" * 40 + "," + "1" * 40 + "%," + "1" * 40 + "%)"
+
+    # Act / Assert
+    with pytest.raises(ValueError):
+        ImageColor.getrgb(color_too_long)

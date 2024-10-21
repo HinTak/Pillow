@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import pytest
+
 from PIL import Image, ImageFilter
 
 sample = Image.new("L", (7, 5))
@@ -13,18 +16,18 @@ sample.putdata(sum([
 # fmt: on
 
 
-def test_imageops_box_blur():
+def test_imageops_box_blur() -> None:
     i = sample.filter(ImageFilter.BoxBlur(1))
     assert i.mode == sample.mode
     assert i.size == sample.size
     assert isinstance(i, Image.Image)
 
 
-def box_blur(image, radius=1, n=1):
-    return image._new(image.im.box_blur(radius, n))
+def box_blur(image: Image.Image, radius: float = 1, n: int = 1) -> Image.Image:
+    return image._new(image.im.box_blur((radius, radius), n))
 
 
-def assertImage(im, data, delta=0):
+def assert_image(im: Image.Image, data: list[list[int]], delta: int = 0) -> None:
     it = iter(im.getdata())
     for data_row in data:
         im_row = [next(it) for _ in range(im.size[0])]
@@ -34,15 +37,21 @@ def assertImage(im, data, delta=0):
         next(it)
 
 
-def assertBlur(im, radius, data, passes=1, delta=0):
+def assert_blur(
+    im: Image.Image,
+    radius: float,
+    data: list[list[int]],
+    passes: int = 1,
+    delta: int = 0,
+) -> None:
     # check grayscale image
-    assertImage(box_blur(im, radius, passes), data, delta)
+    assert_image(box_blur(im, radius, passes), data, delta)
     rgba = Image.merge("RGBA", (im, im, im, im))
     for band in box_blur(rgba, radius, passes).split():
-        assertImage(band, data, delta)
+        assert_image(band, data, delta)
 
 
-def test_color_modes():
+def test_color_modes() -> None:
     with pytest.raises(ValueError):
         box_blur(sample.convert("1"))
     with pytest.raises(ValueError):
@@ -62,8 +71,13 @@ def test_color_modes():
         box_blur(sample.convert("YCbCr"))
 
 
-def test_radius_0():
-    assertBlur(
+@pytest.mark.parametrize("size", ((0, 1), (1, 0)))
+def test_zero_dimension(size: tuple[int, int]) -> None:
+    assert box_blur(Image.new("L", size)).size == size
+
+
+def test_radius_0() -> None:
+    assert_blur(
         sample,
         0,
         [
@@ -78,8 +92,8 @@ def test_radius_0():
     )
 
 
-def test_radius_0_02():
-    assertBlur(
+def test_radius_0_02() -> None:
+    assert_blur(
         sample,
         0.02,
         [
@@ -95,8 +109,8 @@ def test_radius_0_02():
     )
 
 
-def test_radius_0_05():
-    assertBlur(
+def test_radius_0_05() -> None:
+    assert_blur(
         sample,
         0.05,
         [
@@ -112,8 +126,8 @@ def test_radius_0_05():
     )
 
 
-def test_radius_0_1():
-    assertBlur(
+def test_radius_0_1() -> None:
+    assert_blur(
         sample,
         0.1,
         [
@@ -129,8 +143,8 @@ def test_radius_0_1():
     )
 
 
-def test_radius_0_5():
-    assertBlur(
+def test_radius_0_5() -> None:
+    assert_blur(
         sample,
         0.5,
         [
@@ -146,8 +160,8 @@ def test_radius_0_5():
     )
 
 
-def test_radius_1():
-    assertBlur(
+def test_radius_1() -> None:
+    assert_blur(
         sample,
         1,
         [
@@ -163,8 +177,8 @@ def test_radius_1():
     )
 
 
-def test_radius_1_5():
-    assertBlur(
+def test_radius_1_5() -> None:
+    assert_blur(
         sample,
         1.5,
         [
@@ -180,8 +194,8 @@ def test_radius_1_5():
     )
 
 
-def test_radius_bigger_then_half():
-    assertBlur(
+def test_radius_bigger_then_half() -> None:
+    assert_blur(
         sample,
         3,
         [
@@ -197,8 +211,8 @@ def test_radius_bigger_then_half():
     )
 
 
-def test_radius_bigger_then_width():
-    assertBlur(
+def test_radius_bigger_then_width() -> None:
+    assert_blur(
         sample,
         10,
         [
@@ -212,8 +226,8 @@ def test_radius_bigger_then_width():
     )
 
 
-def test_extreme_large_radius():
-    assertBlur(
+def test_extreme_large_radius() -> None:
+    assert_blur(
         sample,
         600,
         [
@@ -227,8 +241,8 @@ def test_extreme_large_radius():
     )
 
 
-def test_two_passes():
-    assertBlur(
+def test_two_passes() -> None:
+    assert_blur(
         sample,
         1,
         [
@@ -245,8 +259,8 @@ def test_two_passes():
     )
 
 
-def test_three_passes():
-    assertBlur(
+def test_three_passes() -> None:
+    assert_blur(
         sample,
         1,
         [

@@ -2,13 +2,12 @@
 # install raqm
 
 
-archive=raqm-0.7.0
+archive=libraqm-0.10.2
 
-./download-and-extract.sh $archive https://raw.githubusercontent.com/python-pillow/pillow-depends/master/$archive.tar.gz
+./download-and-extract.sh $archive https://raw.githubusercontent.com/python-pillow/pillow-depends/main/$archive.tar.gz
 
 pushd $archive
 
-./configure --prefix=/usr && make -j4 && sudo make -j4 install
+meson build --prefix=/usr && sudo ninja -C build install
 
 popd
-

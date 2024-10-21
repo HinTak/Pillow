@@ -1,6 +1,34 @@
 name: Test
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - "**"
+    paths-ignore:
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/wheels*"
+      - ".gitmodules"
+      - "docs/**"
+      - "wheels/**"
+  pull_request:
+    paths-ignore:
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/wheels*"
+      - ".gitmodules"
+      - "docs/**"
+      - "wheels/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COVERAGE_CORE: sysmon
+  FORCE_COLOR: 1
 
 jobs:
   build:
@@ -9,70 +37,85 @@ jobs:
       fail-fast: false
       matrix:
         os: [
+          "macos-latest",
           "ubuntu-latest",
-          "macOS-latest",
         ]
         python-version: [
-          "pypy3",
-          "3.8",
-          "3.7",
-          "3.6",
-          "3.5",
+          "pypy3.10",
+          "3.13",
+          "3.12",
+          "3.11",
+          "3.10",
+          "3.9",
         ]
         include:
-        - python-version: "3.5"
-          env: PYTHONOPTIMIZE=2
-        - python-version: "3.6"
-          env: PYTHONOPTIMIZE=1
-        # Include new variables for Codecov
-        - os: ubuntu-latest
-          codecov-flag: GHA_Ubuntu
-        - os: macOS-latest
-          codecov-flag: GHA_macOS
+        - { python-version: "3.11", PYTHONOPTIMIZE: 1, REVERSE: "--reverse" }
+        - { python-version: "3.10", PYTHONOPTIMIZE: 2 }
+        # Free-threaded
+        - { os: "ubuntu-latest", python-version: "3.13-dev", disable-gil: true }
+        # M1 only available for 3.10+
+        - { os: "macos-13", python-version: "3.9" }
+        exclude:
+        - { os: "macos-latest", python-version: "3.9" }
 
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }} Python ${{ matrix.python-version }}
+    name: ${{ matrix.os }} Python ${{ matrix.python-version }} ${{ matrix.disable-gil && 'free-threaded' || '' }}
 
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Ubuntu cache
-      uses: actions/cache@v1
-      if: startsWith(matrix.os, 'ubuntu')
-      with:
-        path: ~/.cache/pip
-        key:
-          ${{ matrix.os }}-${{ matrix.python-version }}-${{ hashFiles('**/.ci/*.sh') }}
-        restore-keys: |
-          ${{ matrix.os }}-${{ matrix.python-version }}-
-
-    - name: macOS cache
-      uses: actions/cache@v1
-      if: startsWith(matrix.os, 'macOS')
-      with:
-        path: ~/Library/Caches/pip
-        key:
-          ${{ matrix.os }}-${{ matrix.python-version }}-${{ hashFiles('**/.ci/*.sh') }}
-        restore-keys: |
-          ${{ matrix.os }}-${{ matrix.python-version }}-
+    - uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v5
+      if: "${{ !matrix.disable-gil }}"
       with:
         python-version: ${{ matrix.python-version }}
+        allow-prereleases: true
+        cache: pip
+        cache-dependency-path: |
+          ".ci/*.sh"
+          "pyproject.toml"
+
+    - name: Set up Python ${{ matrix.python-version }} (free-threaded)
+      uses: deadsnakes/action@v3.2.0
+      if: "${{ matrix.disable-gil }}"
+      with:
+        python-version: ${{ matrix.python-version }}
+        nogil: ${{ matrix.disable-gil }}
+
+    - name: Set PYTHON_GIL
+      if: "${{ matrix.disable-gil }}"
+      run: |
+        echo "PYTHON_GIL=0" >> $GITHUB_ENV
 
     - name: Build system information
-      run: python .github/workflows/system-info.py
+      run: python3 .github/workflows/system-info.py
+
+    - name: Cache libimagequant
+      if: startsWith(matrix.os, 'ubuntu')
+      uses: actions/cache@v4
+      id: cache-libimagequant
+      with:
+        path: ~/cache-libimagequant
+        key: ${{ runner.os }}-libimagequant-${{ hashFiles('depends/install_imagequant.sh') }}
 
     - name: Install Linux dependencies
       if: startsWith(matrix.os, 'ubuntu')
       run: |
         .ci/install.sh
+      env:
+        GHA_PYTHON_VERSION: ${{ matrix.python-version }}
+        GHA_LIBIMAGEQUANT_CACHE_HIT: ${{ steps.cache-libimagequant.outputs.cache-hit }}
 
     - name: Install macOS dependencies
       if: startsWith(matrix.os, 'macOS')
       run: |
         .github/workflows/macos-install.sh
+      env:
+        GHA_PYTHON_VERSION: ${{ matrix.python-version }}
+
+    - name: Register gcc problem matcher
+      if: "matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'"
+      run: echo "::add-matcher::.github/problem-matchers/gcc.json"
 
     - name: Build
       run: |
@@ -80,32 +123,50 @@ jobs:
 
     - name: Test
       run: |
-        .ci/test.sh
+        if [ $REVERSE ]; then
+          python3 -m pip install pytest-reverse
+        fi
+        if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+          xvfb-run -s '-screen 0 1024x768x24' sway&
+          export WAYLAND_DISPLAY=wayland-1
+          .ci/test.sh
+        else
+          .ci/test.sh
+        fi
+      env:
+        PYTHONOPTIMIZE: ${{ matrix.PYTHONOPTIMIZE }}
+        REVERSE: ${{ matrix.REVERSE }}
 
     - name: Prepare to upload errors
       if: failure()
       run: |
         mkdir -p Tests/errors
-      shell: pwsh
 
     - name: Upload errors
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: errors
         path: Tests/errors
-
-    - name: Docs
-      if: startsWith(matrix.os, 'ubuntu') && matrix.python-version == 3.8
-      run: |
-        pip install sphinx-rtd-theme
-        make doccheck
 
     - name: After success
       run: |
         .ci/after_success.sh
 
     - name: Upload coverage
-      run: bash <(curl -s https://codecov.io/bash) -F ${{ matrix.codecov-flag }}
-      env:
-        CODECOV_NAME: ${{ matrix.os }} Python ${{ matrix.python-version }}
+      uses: codecov/codecov-action@v4
+      with:
+        flags: ${{ matrix.os == 'ubuntu-latest' && 'GHA_Ubuntu' || 'GHA_macOS' }}
+        name: ${{ matrix.os }} Python ${{ matrix.python-version }}
+        gcov: true
+        token: ${{ secrets.CODECOV_ORG_TOKEN }}
+
+  success:
+    permissions:
+      contents: none
+    needs: build
+    runs-on: ubuntu-latest
+    name: Test Successful
+    steps:
+      - name: Success
+        run: echo Test Successful

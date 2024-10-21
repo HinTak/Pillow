@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # Reproductions/tests for OOB read errors in FliDecode.c
 
 # When run in python, all of these images should fail for
@@ -12,15 +10,15 @@
 # the output should be empty. There may be python issues
 # in the valgrind especially if run in a debug python
 # version.
-
+from __future__ import annotations
 
 from PIL import Image
 
 repro = ("00r0_gray_l.jp2", "00r1_graya_la.jp2")
 
 for path in repro:
-    im = Image.open(path)
-    try:
-        im.load()
-    except Exception as msg:
-        print(msg)
+    with Image.open(path) as im:
+        try:
+            im.load()
+        except Exception as msg:
+            print(msg)
